@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
 
     <application
+        android:icon="@drawable/ic_launcher"
         android:label="Whiteboard"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
         <activity
