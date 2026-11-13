@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>وایت‌برد آموزشی</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;background:#e8eaf0;display:flex;flex-direction:column;height:100vh}
+#bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#1f2937;color:#fff;align-items:center}
+button,select{font-family:inherit;padding:6px 10px;border:0;border-radius:6px;background:#374151;color:#fff;cursor:pointer}
+button.on{background:#2563eb}
+button.rec{background:#dc2626}
+input[type=color]{width:36px;height:30px;border:0;padding:0}
+#wrap{flex:1;overflow:auto;display:flex;justify-content:center;padding:10px}
+#board{background:#fff;width:100%;max-width:1400px;aspect-ratio:16/9;box-shadow:0 2px 12px #0003;touch-action:none;cursor:crosshair}
+#media{position:fixed;left:12px;bottom:12px;width:320px;display:none;background:#000;border-radius:8px;z-index:5}
+#media video,#media audio{width:100%}
+#media b{position:absolute;top:2px;right:6px;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="bar">
+ <button data-t="pen" class="on">✏️ قلم</button>
+ <button data-t="eraser">🧽 پاک‌کن</button>
+ <button data-t="line">╱ خط</button>
+ <button data-t="rect">▭ مستطیل</button>
+ <button data-t="circle">◯ دایره</button>
+ <button data-t="text">T متن</button>
+ <input type="color" id="color" value="#111111">
+ <select id="size"><option>2</option><option selected>4</option><option>8</option><option>16</option></select>
+ <button id="undo">↩️ بازگشت</button>
+ <button id="clear">🗑 پاک‌کردن صفحه</button>
+ <button id="prev">▶</button><span id="pg">1/1</span><button id="next">◀</button>
+ <button id="add">➕ صفحه</button>
+ <button id="up">📁 آپلود فایل</button>
+ <button id="png">💾 ذخیره تصویر</button>
+ <button id="recBtn">⏺ ضبط صفحه + صدا</button>
+ <input type="file" id="file" hidden accept="image/*,application/pdf,video/*,audio/*,.txt" multiple>
+</div>
+<div id="wrap"><canvas id="board" width="1600" height="900"></canvas></div>
+<div id="media"><b id="mx">✕</b><div id="mbox"></div></div>
+<script>
+const cv=document.getElementById('board'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let tool='pen',drawing=false,sx,sy,base,pages=[null],cur=0,hist=[];
+function blank(){ctx.globalCompositeOperation='source-over';ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,900)}
+blank();
+function pos(e){const r=cv.getBoundingClientRect();return[(e.clientX-r.left)*1600/r.width,(e.clientY-r.top)*900/r.height]}
+function snap(){hist.push(cv.toDataURL());if(hist.length>30)hist.shift()}
+function style(){ctx.strokeStyle=tool=='eraser'?'#fff':$('color').value;ctx.fillStyle=$('color').value;ctx.lineWidth=tool=='eraser'?$('size').value*4:+$('size').value;ctx.lineCap=ctx.lineJoin='round'}
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{tool=b.dataset.t;document.querySelectorAll('[data-t]').forEach(x=>x.classList.toggle('on',x==b))});
+cv.onpointerdown=e=>{
+ const[x,y]=pos(e);
+ if(tool=='text'){const t=prompt('متن را بنویسید:');if(t){snap();const fs=+$('size').value*6+12;ctx.font=fs+'px Vazirmatn,Tahoma,sans-serif';ctx.fillStyle=$('color').value;const rtl=/[\u0600-\u06FF]/.test(t);ctx.direction=rtl?'rtl':'ltr';ctx.textAlign=rtl?'right':'left';t.split('\n').forEach((l,i)=>ctx.fillText(l,x,y+i*fs*1.3))}return}
+ snap();drawing=true;sx=x;sy=y;style();cv.setPointerCapture(e.pointerId);
+ base=ctx.getImageData(0,0,1600,900);
+ if(tool=='pen'||tool=='eraser'){ctx.beginPath();ctx.moveTo(x,y)}
+};
+cv.onpointermove=e=>{
+ if(!drawing)return;const[x,y]=pos(e);
+ if(tool=='pen'||tool=='eraser'){ctx.lineTo(x,y);ctx.stroke();return}
+ ctx.putImageData(base,0,0);ctx.beginPath();
+ if(tool=='line'){ctx.moveTo(sx,sy);ctx.lineTo(x,y)}
+ if(tool=='rect')ctx.rect(sx,sy,x-sx,y-sy);
+ if(tool=='circle')ctx.ellipse((sx+x)/2,(sy+y)/2,Math.abs(x-sx)/2,Math.abs(y-sy)/2,0,0,7);
+ ctx.stroke();
+};
+cv.onpointerup=()=>drawing=false;
+function load(url,cb){const i=new Image();i.onload=()=>{blank();ctx.drawImage(i,0,0);cb&&cb()};i.src=url}
+$('undo').onclick=()=>{if(hist.length)load(hist.pop())};
+$('clear').onclick=()=>{snap();blank()};
+function save(){pages[cur]=cv.toDataURL()}
+function show(i){save();cur=i;hist=[];pages[i]?load(pages[i]):blank();$('pg').textContent=(cur+1)+'/'+pages.length}
+$('add').onclick=()=>{save();pages.splice(cur+1,0,null);show(cur+1)};
+$('prev').onclick=()=>cur>0&&show(cur-1);
+$('next').onclick=()=>cur<pages.length-1&&show(cur+1);
+$('png').onclick=()=>{const a=document.createElement('a');a.download='board.png';a.href=cv.toDataURL();a.click()};
+// ---- Upload ----
+$('up').onclick=()=>$('file').click();
+function fit(src,w,h){const s=Math.min(1600/w,900/h);const dw=w*s,dh=h*s;ctx.drawImage(src,(1600-dw)/2,(900-dh)/2,dw,dh)}
+function media(el){$('mbox').innerHTML='';$('mbox').appendChild(el);$('media').style.display='block'}
+$('mx').onclick=()=>{$('mbox').innerHTML='';$('media').style.display='none'};
+$('file').onchange=async e=>{
+ for(const f of e.target.files){
+  const url=URL.createObjectURL(f);
+  if(f.type.startsWith('image/')){const i=new Image();i.onload=()=>{snap();fit(i,i.width,i.height)};i.src=url}
+  else if(f.type.startsWith('video/')||f.type.startsWith('audio/')){const m=document.createElement(f.type.startsWith('video')?'video':'audio');m.src=url;m.controls=true;media(m)}
+  else if(f.type=='application/pdf'){
+   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+   const pdf=await pdfjsLib.getDocument(url).promise;save();
+   for(let n=1;n<=pdf.numPages;n++){
+    const p=await pdf.getPage(n),vp=p.getViewport({scale:2}),c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+    await p.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+    blank();fit(c,c.width,c.height);
+    if(n==1&&!pages[cur]){pages[cur]=cv.toDataURL()}else{pages.splice(cur+n-1,0,cv.toDataURL())}
+   }
+   show(cur);
+  }
+  else if(f.name.endsWith('.txt')){const t=await f.text();snap();const rtl=/[\u0600-\u06FF]/.test(t);ctx.font='32px Vazirmatn,Tahoma,sans-serif';ctx.fillStyle=$('color').value;ctx.direction=rtl?'rtl':'ltr';ctx.textAlign=rtl?'right':'left';t.split('\n').slice(0,24).forEach((l,i)=>ctx.fillText(l,rtl?1560:40,60+i*36))}
+ }
+ e.target.value='';
+};
+// ---- Screen recording with audio ----
+let rec,chunks,streams=[];
+$('recBtn').onclick=async()=>{
+ if(rec&&rec.state=='recording'){rec.stop();return}
+ try{
+  const screen=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+  let mic=null;try{mic=await navigator.mediaDevices.getUserMedia({audio:true})}catch(_){alert('میکروفون در دسترس نیست؛ فقط صدای سیستم ضبط می‌شود.')}
+  const ac=new AudioContext(),dest=ac.createMediaStreamDestination();
+  [screen,mic].forEach(s=>{if(s&&s.getAudioTracks().length)ac.createMediaStreamSource(s).connect(dest)});
+  const out=new MediaStream([...screen.getVideoTracks(),...dest.stream.getAudioTracks()]);
+  streams=[screen,mic];chunks=[];
+  rec=new MediaRecorder(out,{mimeType:'video/webm'});
+  rec.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+  rec.onstop=()=>{streams.forEach(s=>s&&s.getTracks().forEach(t=>t.stop()));ac.close();
+   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(chunks,{type:'video/webm'}));a.download='lesson.webm';a.click();
+   $('recBtn').textContent='⏺ ضبط صفحه + صدا';$('recBtn').classList.remove('rec')};
+  screen.getVideoTracks()[0].onended=()=>rec.state=='recording'&&rec.stop();
+  rec.start();$('recBtn').textContent='⏹ توقف و ذخیره';$('recBtn').classList.add('rec');
+ }catch(err){alert('ضبط شروع نشد: '+err.message)}
+};
+</script>
+</body>
+</html>
